@@ -3,7 +3,7 @@
    [clojure.java.io :as io]
    [clojure.test :refer [deftest is testing]]
    [us.chouser.open :as open
-             :refer [close with-close-fn with-open+]]))
+    :refer [close with-close-fn with-open+]]))
 
 (deftest test-protocol
   (testing "java.io.Close"
@@ -114,8 +114,24 @@
       (is (= '{:hint _b} (-> ex ex-data))))))
 
 (deftest examples
-  (with-open+ [a (io/reader "foo")])
-  (with-open+ [x (reify
-                   Object (toString [_] "object x")
-                   java.lang.AutoCloseable (close [_] (prn :close-x)))]
-    (prn :body (str x))))
+  (is (= nil
+         (with-open+ [x (reify
+                          Object (toString [_] "object x")
+                          java.lang.AutoCloseable (close [_] (prn :close-x)))]
+           (prn :body (str x)))))
+
+  (let [ex (try
+             (with-open+ [a (with-close-fn [:object-a] (fn [_] (prn :close-a)))
+                          b (with-close-fn [:object-b] (fn [_] (throw (ex-info "close failed" {}))))]
+               (prn :body)
+               (throw (ex-info "body failed" {})))
+             (catch Exception ex ex))]
+    (is (= "body failed" (.getMessage ex))))
+
+  (let [my-map-resource
+        (with-close-fn {:type :map-resource, :value 10}
+          #(println "Closing map resource:" %))]
+    (is (= nil
+           (with-open+ [{resource-type :type, resource-value :value} my-map-resource]
+             (println "Resource type:" resource-type)
+             (println "Resource value:" resource-value))))))
