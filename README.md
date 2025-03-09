@@ -2,7 +2,7 @@
 
 A library that provides a `with-open+` macro that addresses some shortcomings of Clojure's standard `with-open`, offering:
 
-<img src="images/flower-logo.svg" style="float: right; width: 400px">
+<img src="images/flower-logo.svg" style="width: 400px" align="right">
 
 - **Destructuring Support:** Bindings in `with-open+` fully support destructuring, just like `let`.
 - **Custom Close Functions:** You can specify a custom closing function for each resource via a protocol, interface, or metadata.
