@@ -1,0 +1,86 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="70 20 170 170">
+  <circle cx="150" cy="100" r="70" fill="none" stroke="#888" stroke-width="1" stroke-opacity="0.3"/>
+
+  <!-- Stem -->
+  <path d="M150,170 C150,170 150,130 150,100" stroke="#3D8F5F" stroke-width="4" fill="none"/>
+
+  <!-- Leaves -->
+  <path d="M150,145 C150,145 135,135 120,145" stroke="#3D8F5F" stroke-width="3" fill="none"/>
+  <path d="M150,155 C150,155 165,150 180,160" stroke="#3D8F5F" stroke-width="3" fill="none"/>
+
+  <!-- Flower petals with animations -->
+  <!-- Left petal -->
+  <path d="M150,100 C130,85 100,85 90,100 C80,115 90,130 110,125 C130,120 150,100 150,100" fill="#D47FA6" stroke="#C16A94" stroke-width="1">
+    <animate id="leftPetalClose"
+             attributeName="d"
+             dur="4s"
+             begin="60s;leftPetalOpen.end+60s"
+             fill="freeze"
+             to="M150,100 C140,95 120,100 110,110 C100,120 105,130 120,125 C135,120 150,100 150,100" />
+    <animate id="leftPetalOpen"
+             attributeName="d"
+             dur="4s"
+             begin="leftPetalClose.end+60s"
+             fill="freeze"
+             to="M150,100 C130,85 100,85 90,100 C80,115 90,130 110,125 C130,120 150,100 150,100" />
+  </path>
+
+  <!-- Right petal -->
+  <path d="M150,100 C170,70 200,60 220,80 C240,100 230,130 200,135 C170,140 150,100 150,100" fill="#D47FA6" stroke="#C16A94" stroke-width="1">
+    <animate id="rightPetalClose"
+             attributeName="d"
+             dur="4s"
+             begin="60s;rightPetalOpen.end+60s"
+             fill="freeze"
+             to="M150,100 C160,95 170,100 180,110 C190,120 185,130 170,125 C155,120 150,100 150,100" />
+    <animate id="rightPetalOpen"
+             attributeName="d"
+             dur="4s"
+             begin="rightPetalClose.end+60s"
+             fill="freeze"
+             to="M150,100 C170,70 200,60 220,80 C240,100 230,130 200,135 C170,140 150,100 150,100" />
+  </path>
+
+  <!-- Top petal -->
+  <path d="M150,100 C140,70 150,40 180,30 C210,20 230,50 210,70 C190,90 150,100 150,100" fill="#D47FA6" stroke="#C16A94" stroke-width="1">
+    <animate id="topPetalClose"
+             attributeName="d"
+             dur="4s"
+             begin="60s;topPetalOpen.end+60s"
+             fill="freeze"
+             to="M150,100 C145,85 150,75 160,70 C170,65 180,70 175,85 C170,95 150,100 150,100" />
+    <animate id="topPetalOpen"
+             attributeName="d"
+             dur="4s"
+             begin="topPetalClose.end+60s"
+             fill="freeze"
+             to="M150,100 C140,70 150,40 180,30 C210,20 230,50 210,70 C190,90 150,100 150,100" />
+  </path>
+
+  <!-- Bottom petal -->
+  <path d="M150,100 C155,120 160,140 150,160 C140,180 120,170 130,150 C140,130 150,100 150,100" fill="#D47FA6" stroke="#C16A94" stroke-width="1">
+    <animate id="bottomPetalClose"
+             attributeName="d"
+             dur="4s"
+             begin="60s;bottomPetalOpen.end+60s"
+             fill="freeze"
+             to="M150,100 C150,110 150,120 145,130 C140,140 135,135 140,125 C145,115 150,100 150,100" />
+    <animate id="bottomPetalOpen"
+             attributeName="d"
+             dur="4s"
+             begin="bottomPetalClose.end+60s"
+             fill="freeze"
+             to="M150,100 C155,120 160,140 150,160 C140,180 120,170 130,150 C140,130 150,100 150,100" />
+  </path>
+
+  <!-- Flower center -->
+  <circle cx="150" cy="100" r="15" fill="#FFDA77" stroke="#E6B94D" stroke-width="1"/>
+  <circle cx="150" cy="100" r="10" fill="#E6B94D" stroke="none"/>
+
+  <!-- Pollen dots -->
+  <circle cx="153" cy="95" r="2" fill="#7D5A16"/>
+  <circle cx="145" cy="97" r="2" fill="#7D5A16"/>
+  <circle cx="150" cy="105" r="2" fill="#7D5A16"/>
+  <circle cx="157" cy="103" r="2" fill="#7D5A16"/>
+  <circle cx="143" cy="103" r="2" fill="#7D5A16"/>
+</svg>
