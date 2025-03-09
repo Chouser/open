@@ -15,7 +15,8 @@ A library that provides a `with-open+` macro that addresses some shortcomings of
 ```clojure
 ;; deps.edn
 {:deps {us.chouser/open {:git/url "https://github.com/chouser/open"
-                         :git/tag "v1.0"}}}
+                         :git/tag "v1.0"
+                         :git/sha "4866d47"}}}
 ```
 
 ## Usage
