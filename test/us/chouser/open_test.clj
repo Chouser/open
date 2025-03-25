@@ -113,7 +113,7 @@
       (is (= '[:body c [2] {:a 1}] @*acts))
       (is (= '{:hint _b} (-> ex ex-data))))))
 
-(deftest test-composition
+(deftest test-naive-composition
   (let [simple (fn [id {:keys [open-err? close-err?]}]
                  (when open-err?
                    (throw (ex-info "open-err" {:err-id id :phase :open})))
@@ -147,6 +147,52 @@
       (reset! *acts [])
       (let [ex (try
                  (with-open+ [_ (naive-compound :comp1 {:close-err? true})]
+                   ((cfn nil) :body))
+                 (catch Exception ex ex))]
+        ;; wrong:
+        (is (= {:hint '_} (ex-data ex)))
+        ;; should be:
+        #_(is (= {:hint 'b} (ex-data ex)))
+
+        ;; wrong:
+        (is (= [[:start :a] [:start :b] :body {:id :b}] @*acts))
+        ;; should be:
+        #_(is (= [[:start :a] [:start :b] :body {:id :b} {:id :a}] @*acts))))))
+
+(deftest test-composition
+  (let [simple (fn [id {:keys [open-err? close-err?]}]
+                 (when open-err?
+                   (throw (ex-info "open-err" {:err-id id :phase :open})))
+                 (swap! *acts conj [:start id])
+                 (with-close-fn {:id id} (cfn (when close-err? id))))
+        compound (fn [id & [b-errs]]
+                   (open/with-compound-open [a (simple :a {})
+                                             b (simple :b b-errs)]
+                     (swap! *acts conj [:start id])
+                     (with-close-fn {:id id :a a :b b}
+                       (cfn nil))))]
+    (testing "compound happy path"
+      (reset! *acts [])
+      (with-open+ [_ (compound :comp1)]
+        ((cfn nil) :body))
+      (is (= [[:start :a] [:start :b] [:start :comp1] :body {:id :b} {:id :a}] @*acts)))
+      #_
+    (testing "compound open b fails"
+      (reset! *acts [])
+      (let [ex (try
+                 (with-open+ [_ (compound :comp1 {:open-err? true})]
+                   ((cfn nil) :body))
+                 (catch Exception ex ex))]
+        (is (= {:err-id :b, :phase :open} (ex-data ex)))
+        ;; wrong:
+        (is (= [[:start :a]] @*acts))
+        ;; should be:
+        #_(is (= [[:start :a] {:id :a}] @*acts))))
+        #_
+    (testing "naive-compound close b fails"
+      (reset! *acts [])
+      (let [ex (try
+                 (with-open+ [_ (compound :comp1 {:close-err? true})]
                    ((cfn nil) :body))
                  (catch Exception ex ex))]
         ;; wrong:
