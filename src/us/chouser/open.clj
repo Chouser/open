@@ -26,13 +26,15 @@
              (catch Throwable t#
                (vreset! ~t-sym t#))
              (finally
-               (try
-                 ~@(rest safe-finally)
-                 ;; let any original exception flow out here
-                 (catch Throwable t#
-                   (throw (if-let [orig-t# @~t-sym]
-                            (doto orig-t# (.addSuppressed t#))
-                            t#)))))))))))
+               (some->
+                (try
+                  ~@(rest safe-finally)
+                  @~t-sym
+                  (catch Throwable t#
+                    (if-let [orig-t# @~t-sym]
+                      (doto orig-t# (.addSuppressed t#))
+                      t#)))
+                throw))))))))
 
 (defmacro safe-finally
   "Can be used in try+ instead of `finally`. Any exception thrown in
@@ -97,10 +99,8 @@
   java.lang.AutoCloseable (close [x] (.close x))
   java.lang.Object (close [x] ;; default implemenataion relies on UpdateCloseFn
                      (if-let [c (get-close-fn x)]
-                       (do
-                         (prn :close-fn c)
-                         (c x))
-                       #_(throw (ex-info "no close fn found" {:closeable x})))
+                       (c x)
+                       (throw (ex-info "no close fn found" {:closeable x})))
                      nil))
 
 ;; TODO make this provice a new closeable-value protocol instead
@@ -144,16 +144,14 @@
   [closeable-pairs orig-throwable]
   (reduce (fn [prev-throwable [closeable hint]]
             (try
-              (prn :close hint)
               (close closeable)
-              (prn :done-close hint)
               prev-throwable
               (catch Throwable t
-                (prn :attach (.getMessage t) :to prev-throwable)
-                (let [t (ex-info "Error during closing" {:hint hint} t)]
-                  (if prev-throwable
-                    (doto prev-throwable (.addSuppressed t))
-                    t)))))
+                (let [t (ex-info "Error during closing" {:hint hint} t)
+                      t (if prev-throwable
+                          (doto prev-throwable (.addSuppressed t))
+                          t)]
+                  t))))
           orig-throwable
           closeable-pairs))
 
@@ -179,8 +177,8 @@
            (with-close-fn
              (do ~@body)
              (fn [_#]
-               (when-let [t# (close-all @~closeables nil)]
-                 (throw t#)))))
+               (some-> (close-all @~closeables nil)
+                       throw))))
          (catch Throwable t#
            (throw (close-all @~closeables t#)))))))
 
@@ -193,10 +191,7 @@
    - Attaches exceptions thrown during closing as suppressed to original exception"
   [bindings & body]
   `(let [c# (compose-closeable [~@bindings
-                                body# (set-close-fn [(do ~@body)] (fn [x#] (prn :close-body x#)))]
-                                (prn :body (get-close-fn body#))
+                                body# (set-close-fn [(do ~@body)] identity)]
                                body#)]
-     (prn :pre-close)
      (close c#)
-     (prn :post-close)
      (nth c# 0)))

@@ -88,7 +88,7 @@
       (is (= {:hint :h1} (-> ex .getSuppressed first ex-data))))))
 
 (deftest test-with-open+
-  #_(testing "no exception"
+  (testing "no exception"
     (reset! *acts [])
     (let [orig-c (atom :c)]
       (is (= :result
@@ -101,7 +101,7 @@
                ((cfn nil) :body)
                :result)))
       (is (= [:body orig-c [2] {:a 1}] @*acts))))
-  #_(testing "body exception"
+  (testing "body exception"
     (reset! *acts [])
     (let [ex (try
                (with-open+ [_ (with-close-fn {:a 1} (cfn nil))

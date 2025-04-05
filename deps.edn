@@ -1,2 +1,8 @@
 {:paths ["src"]
- :deps {org.clojure/clojure {:mvn/version "1.12.0"}}}
+ :deps {org.clojure/clojure {:mvn/version "1.12.0"}}
+ :aliases {:cloverage {:extra-deps {cloverage/cloverage {:mvn/version "1.2.4"}}
+                       :extra-paths ["test"]
+                       :main-opts ["-m" "cloverage.coverage"
+                                   "-ns-regex" "us.chouser.open"
+                                   "--extra-test-ns" "us.chouser.open-test"]
+                       :jvm-opts ["-Dclojure.main.report=stderr"]}}}
