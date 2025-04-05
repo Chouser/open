@@ -111,21 +111,29 @@
   closing behaviors. This is meant to act as an adapter to jarohen/with-open
   functions."
   [f]
-  (let [*result (promise)
+  (let [*open-result (promise)
+        *close-result (promise)
         thread (-> (Thread/ofVirtual)
                    (.start (bound-fn []
                              (try
-                               (f (fn [x]
-                                    (deliver *result {:return x})
-                                    (LockSupport/park)
-                                    nil))
+                               (deliver *close-result
+                                        {:return
+                                         (f (fn [x]
+                                              (deliver *open-result {:return x})
+                                              (LockSupport/park)
+                                              nil))})
                                (catch Throwable t
-                                 (deliver *result {:thrown t}))))))
-        {:keys [return thrown]} @*result]
+                                 (deliver *open-result {:thrown t})
+                                 (deliver *close-result {:thrown t}))))))
+        {:keys [return thrown]} @*open-result]
     (when thrown (throw thrown))
     (with-close-fn return (fn [_]
                             (LockSupport/unpark thread)
-                            (.join thread)))))
+                            (.join thread) ;; not really necesary
+                            (let [{:keys [_return thrown]} @*close-result]
+                              (when thrown (throw thrown))
+                              ;; TODO consider returning _return here and in all close-fns
+                              nil)))))
 
 ;; It would be straighforward for this to take fns instead of closeables, and
 ;; for the macro to wrap such a fn around each closeable. Such a close-all would

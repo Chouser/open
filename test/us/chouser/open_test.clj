@@ -4,16 +4,60 @@
    [us.chouser.open :as open
     :refer [close with-close-fn with-open+ try+ safe-finally]]))
 
-(deftest test-try+
-  (let [*events (atom [])
-        ex (try
-             (try+
-              (throw (ex-info "x" {:y :z}))
-              (safe-finally
-               (swap! *events conj :f)))
-             (catch Exception ex ex))]
-    (is (= {:y :z} (ex-data ex)))
-    (is (= [:f] @*events))))
+(def *acts (atom []))
+
+(deftest test-safe-finally
+  (testing "body throws"
+    (reset! *acts [])
+    (let [ex (try
+               (try+
+                (throw (ex-info "x" {:y :z}))
+                (safe-finally
+                 (swap! *acts conj :f)))
+               (catch Exception ex ex))]
+      (is (= {:y :z} (ex-data ex)))
+      (is (= [:f] @*acts))))
+  (testing "finally throws"
+    (reset! *acts [])
+    (let [ex (try
+               (try+
+                (swap! *acts conj :body)
+                (safe-finally
+                 (throw (ex-info "x" {:y :z}))))
+               (catch Exception ex ex))]
+      (is (= {:y :z} (ex-data ex)))
+      (is (= [:body] @*acts))))
+  (testing "both throw"
+    (reset! *acts [])
+    (let [ex (try
+               (try+
+                (throw (ex-info "x" {:body 1}))
+                (safe-finally
+                 (throw (ex-info "x" {:finally 1}))))
+               (catch Exception ex ex))]
+      (is (= {:body 1} (ex-data ex)))
+      (is (= {:finally 1} (ex-data (first (.getSuppressed ex))))))))
+
+(deftest test-normal-catch-finally
+  (reset! *acts [])
+  (is (= :io
+         (try+
+           (swap! *acts conj :body)
+          (throw (java.io.IOException. "foo"))
+          (catch java.io.IOException _
+            (swap! *acts conj :catch)
+            :io)
+          (finally
+            (swap! *acts conj :finally)))))
+  (is (= [:body :catch :finally] @*acts))
+  (is (= :ok (try+ :ok))))
+
+(deftest test-catch-info
+  (is (= [:got :b 2]
+         (try+
+          (throw (ex-info "hello" {:a 2 :b 2}))
+          (open/catch-info {:a 2} {:keys [b]} [:got :b b])
+          (catch Error e [:got :err e])))))
 
 (deftest test-protocol
   (testing "java.io.Close"
@@ -39,7 +83,40 @@
     (let [ex (try (close {:not :closeable}) (catch Exception ex ex))]
       (is (= {:closeable {:not :closeable}} (ex-data ex))))))
 
-(def *acts (atom []))
+(deftest test-fn-as-closeable
+  (testing "happy path"
+    (reset! *acts [])
+    (let [c (open/fn-as-closeable (fn [f]
+                                    (swap! *acts conj :before)
+                                    (f [10])
+                                    (swap! *acts conj :after)))]
+      (is (= [10] c))
+      (is (= [:before] @*acts))
+      (close c)
+      (is (= [:before :after] @*acts))))
+  (testing "throw during open"
+    (reset! *acts [])
+    (let [ex (try
+              (open/fn-as-closeable (fn [f]
+                                      (swap! *acts conj :before)
+                                      (throw (ex-info "open" {:open 1}))
+                                      (f [10])
+                                      (swap! *acts conj :after)))
+              (catch Exception ex ex))]
+      (is (= [:before] @*acts))
+      (is (= {:open 1} (ex-data ex)))))
+  (testing "throw during close"
+    (reset! *acts [])
+    (let [c (open/fn-as-closeable (fn [f]
+                                     (swap! *acts conj :before)
+                                     (f [10])
+                                     (swap! *acts conj :after)
+                                     (throw (ex-info "close" {:close 1}))))
+          ex (try (close c)
+                  (catch Exception ex ex))]
+      (is (= [10] c))
+      (is (= [:before :after] @*acts))
+      (is (= {:close 1} (ex-data ex))))))
 
 (defn cfn [err-id]
   (fn [act]
@@ -180,18 +257,7 @@
              (println "Resource type:" resource-type)
              (println "Resource value:" resource-value))))))
 
-#_
-(with-open+ [x (open/fn-as-closeable (fn [f] (prn :in) (f [10]) (prn :out)))]
-  (prn :here x))
 
-#_
-(try+
- (throw (ex-info "hello" {:a 2 :b 2}))
- (catch-info {:a 1} {:keys [b]} [:got :b b])
- (catch Error e [:got :err e])
- (safe-finally
-   (throw (Error. "ick"))
-   (prn 99)))
 
 #_
 (let [c (compose-closeable [x o1
