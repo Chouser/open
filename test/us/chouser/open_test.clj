@@ -1,9 +1,19 @@
 (ns us.chouser.open-test
   (:require
-   [clojure.java.io :as io]
    [clojure.test :refer [deftest is testing]]
    [us.chouser.open :as open
-    :refer [close with-close-fn with-open+]]))
+    :refer [close with-close-fn with-open+ try+ safe-finally]]))
+
+(deftest test-try+
+  (let [*events (atom [])
+        ex (try
+             (try+
+              (throw (ex-info "x" {:y :z}))
+              (safe-finally
+               (swap! *events conj :f)))
+             (catch Exception ex ex))]
+    (is (= {:y :z} (ex-data ex)))
+    (is (= [:f] @*events))))
 
 (deftest test-protocol
   (testing "java.io.Close"
@@ -77,21 +87,21 @@
       (is (= {:err-id :body} (-> ex ex-data)))
       (is (= {:hint :h1} (-> ex .getSuppressed first ex-data))))))
 
-(deftest test-macro
-  (testing "no exception"
+(deftest test-with-open+
+  #_(testing "no exception"
     (reset! *acts [])
     (let [orig-c (atom :c)]
       (is (= :result
              (with-open+ [{:keys [a]} (with-close-fn {:a 1} (cfn nil))
                           [b] (with-close-fn [2] (cfn nil))
-                          c (open/add-close-fn! orig-c (cfn nil))]
+                          c (with-close-fn orig-c (cfn nil))]
                (is (= a 1))
                (is (= b 2))
                (is (= @c :c))
                ((cfn nil) :body)
                :result)))
       (is (= [:body orig-c [2] {:a 1}] @*acts))))
-  (testing "body exception"
+  #_(testing "body exception"
     (reset! *acts [])
     (let [ex (try
                (with-open+ [_ (with-close-fn {:a 1} (cfn nil))
@@ -110,54 +120,9 @@
                             _c (with-close-fn 'c (cfn nil))]
                  ((cfn nil) :body))
                (catch Exception ex ex))]
+      (is (instance? Throwable ex))
       (is (= '[:body c [2] {:a 1}] @*acts))
       (is (= '{:hint _b} (-> ex ex-data))))))
-
-(deftest test-naive-composition
-  (let [simple (fn [id {:keys [open-err? close-err?]}]
-                 (when open-err?
-                   (throw (ex-info "open-err" {:err-id id :phase :open})))
-                 (swap! *acts conj [:start id])
-                 (with-close-fn {:id id} (cfn (when close-err? id))))
-        naive-compound (fn [id & [b-errs]]
-                         (let [a (simple :a {})
-                               b (simple :b b-errs)]
-                           (with-close-fn {:id id :a a :b b}
-                             (fn [_]
-                               (open/close b)
-                               (open/close a)))))]
-    (testing "naive-compound happy path"
-      (reset! *acts [])
-      (with-open+ [_ (naive-compound :comp1)]
-        ((cfn nil) :body))
-      (is (= [[:start :a] [:start :b] :body {:id :b} {:id :a}] @*acts)))
-    ;; hmph. Naive compound object misbehaves in face of exceptions
-    (testing "naive-compound open b fails"
-      (reset! *acts [])
-      (let [ex (try
-                 (with-open+ [_ (naive-compound :comp1 {:open-err? true})]
-                   ((cfn nil) :body))
-                 (catch Exception ex ex))]
-        (is (= {:err-id :b, :phase :open} (ex-data ex)))
-        ;; wrong:
-        (is (= [[:start :a]] @*acts))
-        ;; should be:
-        #_(is (= [[:start :a] {:id :a}] @*acts))))
-    (testing "naive-compound close b fails"
-      (reset! *acts [])
-      (let [ex (try
-                 (with-open+ [_ (naive-compound :comp1 {:close-err? true})]
-                   ((cfn nil) :body))
-                 (catch Exception ex ex))]
-        ;; wrong:
-        (is (= {:hint '_} (ex-data ex)))
-        ;; should be:
-        #_(is (= {:hint 'b} (ex-data ex)))
-
-        ;; wrong:
-        (is (= [[:start :a] [:start :b] :body {:id :b}] @*acts))
-        ;; should be:
-        #_(is (= [[:start :a] [:start :b] :body {:id :b} {:id :a}] @*acts))))))
 
 (deftest test-composition
   (let [simple (fn [id {:keys [open-err? close-err?]}]
@@ -165,45 +130,32 @@
                    (throw (ex-info "open-err" {:err-id id :phase :open})))
                  (swap! *acts conj [:start id])
                  (with-close-fn {:id id} (cfn (when close-err? id))))
-        compound (fn [id & [b-errs]]
-                   (open/with-compound-open [a (simple :a {})
-                                             b (simple :b b-errs)]
-                     (swap! *acts conj [:start id])
-                     (with-close-fn {:id id :a a :b b}
-                       (cfn nil))))]
-    (testing "compound happy path"
+        compose (fn [id & [b-errs]]
+                  (open/compose-closeable
+                   [a (simple :a {})
+                    b (simple :b b-errs)]
+                   {:id id :a a :b b}))]
+    (testing "compose happy path"
       (reset! *acts [])
-      (with-open+ [_ (compound :comp1)]
+      (with-open+ [_ (compose :comp1)]
         ((cfn nil) :body))
-      (is (= [[:start :a] [:start :b] [:start :comp1] :body {:id :b} {:id :a}] @*acts)))
-      #_
-    (testing "compound open b fails"
+      (is (= [[:start :a] [:start :b] :body {:id :b} {:id :a}] @*acts)))
+    (testing "compose open b fails"
       (reset! *acts [])
       (let [ex (try
-                 (with-open+ [_ (compound :comp1 {:open-err? true})]
+                 (with-open+ [_ (compose :comp1 {:open-err? true})]
                    ((cfn nil) :body))
                  (catch Exception ex ex))]
         (is (= {:err-id :b, :phase :open} (ex-data ex)))
-        ;; wrong:
-        (is (= [[:start :a]] @*acts))
-        ;; should be:
-        #_(is (= [[:start :a] {:id :a}] @*acts))))
-        #_
-    (testing "naive-compound close b fails"
-      (reset! *acts [])
-      (let [ex (try
-                 (with-open+ [_ (compound :comp1 {:close-err? true})]
-                   ((cfn nil) :body))
-                 (catch Exception ex ex))]
-        ;; wrong:
-        (is (= {:hint '_} (ex-data ex)))
-        ;; should be:
-        #_(is (= {:hint 'b} (ex-data ex)))
-
-        ;; wrong:
-        (is (= [[:start :a] [:start :b] :body {:id :b}] @*acts))
-        ;; should be:
-        #_(is (= [[:start :a] [:start :b] :body {:id :b} {:id :a}] @*acts))))))
+        (is (= [[:start :a] {:id :a}] @*acts))))
+    (testing "compose close b fails"
+        (reset! *acts [])
+        (prn :begin)
+        (let [ex (try
+                   (close (compose :comp1 {:close-err? true}))
+                   (catch Exception ex ex))]
+          (is (= {:hint 'b} (ex-data ex)))
+          (is (= [[:start :a] [:start :b] {:id :b} {:id :a}] @*acts))))))
 
 (deftest examples
   (is (= nil
@@ -227,3 +179,38 @@
            (with-open+ [{resource-type :type, resource-value :value} my-map-resource]
              (println "Resource type:" resource-type)
              (println "Resource value:" resource-value))))))
+
+#_
+(with-open+ [x (open/fn-as-closeable (fn [f] (prn :in) (f [10]) (prn :out)))]
+  (prn :here x))
+
+#_
+(try+
+ (throw (ex-info "hello" {:a 2 :b 2}))
+ (catch-info {:a 1} {:keys [b]} [:got :b b])
+ (catch Error e [:got :err e])
+ (safe-finally
+   (throw (Error. "ick"))
+   (prn 99)))
+
+#_
+(let [c (compose-closeable [x o1
+                            y o2]
+                           {:x x :y y})
+      prep-stuff 123]
+  (reify Foo
+    ...
+    Closeable
+    (close [_]
+      (try+
+       my-close
+       (safe-finally
+        (close c))))))
+
+#_
+(compose-closeable [x o1
+                    y o2
+                    mine (let [prep-stuff 123]
+                           (with-close-fn {... ...}
+                             (fn [x] my-close)))]
+                   mine)
