@@ -1,6 +1,7 @@
 (ns us.chouser.open-test
   (:require
    [clojure.test :refer [deftest is testing]]
+   [clojure.java.io :as io]
    [us.chouser.open :as open
     :refer [close with-close-fn with-open+ try+ safe-finally]]))
 
@@ -235,27 +236,34 @@
           (is (= [[:start :a] [:start :b] {:id :b} {:id :a}] @*acts))))))
 
 (deftest examples
-  (is (= nil
-         (with-open+ [x (reify
-                          Object (toString [_] "object x")
-                          java.lang.AutoCloseable (close [_] (prn :close-x)))]
-           (prn :body (str x)))))
+  (is (= "hello world\n"
+         (with-out-str
+           (with-open+ [r1 (io/reader (java.io.StringReader. "hello"))
+                        r2 (io/reader (java.io.StringReader. "world"))]
+             (println (.readLine r1) (.readLine r2))))))
+
+  (is (= "before\nmiddle 1\nafter 2\n"
+         (with-out-str
+           (with-open+ [{:keys [a]} (with-close-fn (do (println "before")
+                                                       {:a 1, :b 2})
+                                      (fn [{:keys [b]}]
+                                        (println "after" b)))]
+             (println "middle" a)))))
+
+  (is (= "a: 1\n"
+         (with-out-str
+           (with-open+ [a (with-close-fn (atom 1)
+                            #(swap! % inc))]
+             (println "a:" @a)))))
 
   (let [ex (try
-             (with-open+ [a (with-close-fn [:object-a] (fn [_] (prn :close-a)))
-                          b (with-close-fn [:object-b] (fn [_] (throw (ex-info "close failed" {}))))]
-               (prn :body)
+             (with-open+ [bad-closeable (with-close-fn [:object-a]
+                                          (fn [_] (throw (ex-info "close failed" {}))))]
                (throw (ex-info "body failed" {})))
              (catch Exception ex ex))]
-    (is (= "body failed" (.getMessage ex))))
-
-  (let [my-map-resource
-        (with-close-fn {:type :map-resource, :value 10}
-          #(println "Closing map resource:" %))]
-    (is (= nil
-           (with-open+ [{resource-type :type, resource-value :value} my-map-resource]
-             (println "Resource type:" resource-type)
-             (println "Resource value:" resource-value))))))
+    (is (= "body failed" (.getMessage ex)))
+    (is (= "Error during closing" (-> ex .getSuppressed first .getMessage)))
+    (is (= "close failed" (-> ex .getSuppressed first ex-cause .getMessage)))))
 
 
 
